@@ -37,6 +37,7 @@ import org.openmetadata.catalog.api.operations.pipelines.PipelineConfig;
 import org.openmetadata.catalog.api.services.CreateDatabaseService;
 import org.openmetadata.catalog.api.services.CreateDatabaseService.DatabaseServiceType;
 import org.openmetadata.catalog.entity.services.DatabaseService;
+import org.openmetadata.catalog.fernet.Fernet;
 import org.openmetadata.catalog.jdbi3.DatabaseServiceRepository.DatabaseServiceEntityInterface;
 import org.openmetadata.catalog.operations.pipelines.AirflowPipeline;
 import org.openmetadata.catalog.operations.pipelines.DatabaseServiceMetadataPipeline;
@@ -94,7 +95,8 @@ public class DatabaseServiceResourceTest extends EntityResourceTest<DatabaseServ
     DatabaseService service = createAndCheckEntity(createRequest(test).withDescription(null), ADMIN_AUTH_HEADERS);
 
     // Update database description and ingestion service that are null
-    CreateDatabaseService update = createRequest(test).withDescription("description1");
+    CreateDatabaseService update =
+        createRequest(test).withDescription("description1").withDatabaseConnection(service.getDatabaseConnection());
 
     ChangeDescription change = getChangeDescription(service.getVersion());
     change.getFieldsAdded().add(new FieldChange().withName("description").withNewValue("description1"));
@@ -107,7 +109,7 @@ public class DatabaseServiceResourceTest extends EntityResourceTest<DatabaseServ
             .withUsername("username");
     update.withDatabaseConnection(databaseConnection);
     service = updateEntity(update, OK, ADMIN_AUTH_HEADERS);
-    assertEquals(databaseConnection, service.getDatabaseConnection());
+    validateDatabaseConnection(databaseConnection, service.getDatabaseConnection());
     ConnectionArguments connectionArguments =
         new ConnectionArguments()
             .withAdditionalProperty("credentials", "/tmp/creds.json")
@@ -117,7 +119,7 @@ public class DatabaseServiceResourceTest extends EntityResourceTest<DatabaseServ
     databaseConnection.withConnectionArguments(connectionArguments).withConnectionOptions(connectionOptions);
     update.withDatabaseConnection(databaseConnection);
     service = updateEntity(update, OK, ADMIN_AUTH_HEADERS);
-    assertEquals(databaseConnection, service.getDatabaseConnection());
+    validateDatabaseConnection(databaseConnection, service.getDatabaseConnection());
   }
 
   @Test
@@ -187,6 +189,53 @@ public class DatabaseServiceResourceTest extends EntityResourceTest<DatabaseServ
     TestUtils.assertResponse(exception, FORBIDDEN, "Principal: CatalogPrincipal{name='test'} " + "is not admin");
   }
 
+  @Test
+  void fernet_createDatabaseService(TestInfo test) throws IOException {
+    String fernetKey = "ihZpp5gmmDvVsgoOG6OVivKWwC9vd5JQ";
+    Fernet.getInstance().setFernetKey(fernetKey);
+
+    DatabaseConnection databaseConnection =
+        new DatabaseConnection()
+            .withDatabase("test")
+            .withHostPort("host:9000")
+            .withPassword("password")
+            .withUsername("username");
+    DatabaseService service =
+        createAndCheckEntity(createRequest(test, 0).withDatabaseConnection(databaseConnection), ADMIN_AUTH_HEADERS);
+    validatePassword(fernetKey, databaseConnection.getPassword(), service.getDatabaseConnection().getPassword());
+
+    Fernet.getInstance().setFernetKey(fernetKey + ",old_key_not_to_be_used");
+    service =
+        createAndCheckEntity(createRequest(test, 1).withDatabaseConnection(databaseConnection), ADMIN_AUTH_HEADERS);
+    validatePassword(fernetKey, databaseConnection.getPassword(), service.getDatabaseConnection().getPassword());
+  }
+
+  @Test
+  void fernet_rotateDatabaseService(TestInfo test) throws IOException {
+    String oldFernetKey = "ihZpp5gmmDvVsgoOG6OVivKWwC9vd5JQ";
+    String newFernetKey = "0cDdxg2rlodhcsjtmuFsOOvWpRRTW9ZJ";
+    Fernet.getInstance().setFernetKey(oldFernetKey);
+
+    DatabaseConnection databaseConnection =
+        new DatabaseConnection()
+            .withDatabase("test")
+            .withHostPort("host:9000")
+            .withPassword("password")
+            .withUsername("username");
+    DatabaseService service =
+        createAndCheckEntity(createRequest(test).withDatabaseConnection(databaseConnection), ADMIN_AUTH_HEADERS);
+    validatePassword(oldFernetKey, databaseConnection.getPassword(), service.getDatabaseConnection().getPassword());
+    Fernet.getInstance().setFernetKey(newFernetKey + "," + oldFernetKey);
+    TestUtils.post(getResource(collectionName + "/rotate"), OK, ADMIN_AUTH_HEADERS);
+    DatabaseService rotated = getEntity(service.getId(), ADMIN_AUTH_HEADERS);
+    validatePassword(newFernetKey, databaseConnection.getPassword(), rotated.getDatabaseConnection().getPassword());
+  }
+
+  private void validatePassword(String fernetKey, String expected, String tokenized) {
+    Fernet fernet = new Fernet(fernetKey);
+    assertEquals(expected, fernet.decrypt(tokenized));
+  }
+
   @Override
   public CreateDatabaseService createRequest(
       String name, String description, String displayName, EntityReference owner) {
@@ -205,7 +254,18 @@ public class DatabaseServiceResourceTest extends EntityResourceTest<DatabaseServ
     assertEquals(createRequest.getName(), service.getName());
 
     // Validate Database Connection
-    assertEquals(createRequest.getDatabaseConnection(), service.getDatabaseConnection());
+    validateDatabaseConnection(createRequest.getDatabaseConnection(), service.getDatabaseConnection());
+  }
+
+  private void validateDatabaseConnection(DatabaseConnection expected, DatabaseConnection actual) {
+    if (expected == null && actual == null) {
+      return;
+    }
+    assertEquals(expected.getUsername(), actual.getUsername());
+    assertEquals(expected.getDatabase(), actual.getDatabase());
+    assertEquals(expected.getHostPort(), actual.getHostPort());
+    assertEquals(expected.getConnectionArguments(), actual.getConnectionArguments());
+    assertEquals(expected.getConnectionOptions(), actual.getConnectionOptions());
   }
 
   @Override

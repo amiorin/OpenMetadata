@@ -25,6 +25,7 @@ import org.openmetadata.catalog.airflow.AirflowConfiguration;
 import org.openmetadata.catalog.elasticsearch.ElasticSearchConfiguration;
 import org.openmetadata.catalog.events.EventHandlerConfiguration;
 import org.openmetadata.catalog.migration.MigrationConfiguration;
+import org.openmetadata.catalog.fernet.FernetConfiguration;
 import org.openmetadata.catalog.security.AuthenticationConfiguration;
 import org.openmetadata.catalog.security.AuthorizerConfiguration;
 import org.openmetadata.catalog.slack.SlackPublisherConfiguration;
@@ -60,6 +61,9 @@ public class CatalogApplicationConfig extends Configuration {
   @NotNull
   @JsonProperty("migrationConfiguration")
   private MigrationConfiguration migrationConfiguration;
+
+  @JsonProperty("fernetConfiguration")
+  private FernetConfiguration fernetConfiguration;
 
   public DataSourceFactory getDataSourceFactory() {
     return dataSourceFactory;
@@ -123,6 +127,14 @@ public class CatalogApplicationConfig extends Configuration {
 
   public void setSlackEventPublishers(List<SlackPublisherConfiguration> slackEventPublishers) {
     this.slackEventPublishers = slackEventPublishers;
+  }
+
+  public FernetConfiguration getFernetConfiguration() {
+    return fernetConfiguration;
+  }
+
+  public void setFernetConfiguration(FernetConfiguration fernetConfiguration) {
+    this.fernetConfiguration = fernetConfiguration;
   }
 
   @Valid

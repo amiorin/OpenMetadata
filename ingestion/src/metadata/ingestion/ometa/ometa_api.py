@@ -49,6 +49,7 @@ from metadata.ingestion.ometa.auth_provider import AuthenticationProvider
 from metadata.ingestion.ometa.client import REST, APIError, ClientConfig
 from metadata.ingestion.ometa.mixins.mlmodel_mixin import OMetaMlModelMixin
 from metadata.ingestion.ometa.mixins.table_mixin import OMetaTableMixin
+from metadata.ingestion.ometa.mixins.token_mixin import OMetaTokenMixin
 from metadata.ingestion.ometa.mixins.version_mixin import OMetaVersionMixin
 from metadata.ingestion.ometa.openmetadata_rest import (
     Auth0AuthenticationProvider,
@@ -96,7 +97,7 @@ class EntityList(Generic[T], BaseModel):
 
 
 class OpenMetadata(
-    OMetaMlModelMixin, OMetaTableMixin, OMetaVersionMixin, Generic[T, C]
+    OMetaMlModelMixin, OMetaTableMixin, OMetaVersionMixin, Generic[T, C], OMetaTokenMixin
 ):
     """
     Generic interface to the OpenMetadata API

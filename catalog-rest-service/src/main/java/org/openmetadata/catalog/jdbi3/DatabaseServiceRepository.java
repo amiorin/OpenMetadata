@@ -13,25 +13,33 @@
 
 package org.openmetadata.catalog.jdbi3;
 
+import static org.openmetadata.catalog.fernet.Fernet.isTokenized;
 import static org.openmetadata.catalog.util.EntityUtil.toBoolean;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import java.io.IOException;
 import java.net.URI;
+import java.security.GeneralSecurityException;
+import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import org.openmetadata.catalog.Entity;
 import org.openmetadata.catalog.entity.services.DatabaseService;
+import org.openmetadata.catalog.exception.CatalogExceptionMessage;
+import org.openmetadata.catalog.fernet.Fernet;
 import org.openmetadata.catalog.resources.services.database.DatabaseServiceResource;
 import org.openmetadata.catalog.type.ChangeDescription;
 import org.openmetadata.catalog.type.DatabaseConnection;
 import org.openmetadata.catalog.type.EntityReference;
+import org.openmetadata.catalog.type.Include;
 import org.openmetadata.catalog.util.EntityInterface;
 import org.openmetadata.catalog.util.EntityUtil.Fields;
+import org.openmetadata.catalog.util.JsonUtils;
 
 public class DatabaseServiceRepository extends EntityRepository<DatabaseService> {
   public static final String COLLECTION_PATH = "v1/services/databaseServices";
+  private final Fernet fernet;
 
   public DatabaseServiceRepository(CollectionDAO dao) {
     super(
@@ -45,6 +53,26 @@ public class DatabaseServiceRepository extends EntityRepository<DatabaseService>
         false,
         false,
         false);
+    fernet = Fernet.getInstance();
+  }
+
+  public void rotate() throws GeneralSecurityException, IOException, ParseException {
+    if (!fernet.isKeyDefined()) {
+      throw new IllegalArgumentException(CatalogExceptionMessage.fernetKeyNotDefined());
+    }
+    List<String> jsons = dao.listAfter(null, Integer.MAX_VALUE, "", Include.ALL);
+    for (String json : jsons) {
+      DatabaseService databaseService = JsonUtils.readValue(json, DatabaseService.class);
+      DatabaseConnection databaseConnection = databaseService.getDatabaseConnection();
+      if (databaseConnection != null
+          && databaseConnection.getPassword() != null
+          && isTokenized(databaseConnection.getPassword())) {
+        String password = fernet.decrypt(databaseConnection.getPassword());
+        String tokenized = fernet.encrypt(password);
+        databaseConnection.setPassword(tokenized);
+        storeEntity(databaseService, true);
+      }
+    }
   }
 
   @Override
@@ -86,7 +114,16 @@ public class DatabaseServiceRepository extends EntityRepository<DatabaseService>
   }
 
   @Override
-  public void prepare(DatabaseService entity) {}
+  public void prepare(DatabaseService databaseService) {
+    DatabaseConnection databaseConnection = databaseService.getDatabaseConnection();
+    if (fernet.isKeyDefined()
+        && databaseConnection != null
+        && databaseConnection.getPassword() != null
+        && !isTokenized(databaseConnection.getPassword())) {
+      String tokenized = fernet.encrypt(databaseConnection.getPassword());
+      databaseConnection.setPassword(tokenized);
+    }
+  }
 
   @Override
   public void storeEntity(DatabaseService service, boolean update) throws IOException {

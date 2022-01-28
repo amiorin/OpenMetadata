@@ -323,6 +323,23 @@ public class DatabaseServiceResource {
     return response.toResponse();
   }
 
+  @POST
+  @Path("/rotate")
+  @Operation(
+      summary = "Rotate the fernet key",
+      tags = "services",
+      description =
+          "Once connection credentials have been encrypted using a fernet key, changing the key will cause decryption"
+              + " of existing credentials to fail. To rotate the fernet key without invalidating existing encrypted values,"
+              + " prepend the new key to the fernetConfiguration.fernetKey setting, and then invoke this API",
+      responses = {@ApiResponse(responseCode = "200", description = "OK")})
+  public Response rotate(@Context UriInfo uriInfo, @Context SecurityContext securityContext)
+      throws IOException, ParseException, GeneralSecurityException {
+    SecurityUtil.checkAdminOrBotRole(authorizer, securityContext);
+    dao.rotate();
+    return Response.ok().build();
+  }
+
   private DatabaseService getService(CreateDatabaseService create, SecurityContext securityContext) {
     return new DatabaseService()
         .withId(UUID.randomUUID())
