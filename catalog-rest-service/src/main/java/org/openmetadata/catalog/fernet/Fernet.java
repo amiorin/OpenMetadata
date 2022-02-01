@@ -51,7 +51,7 @@ public class Fernet {
     return instance;
   }
 
-  public void initialize(CatalogApplicationConfig config) {
+  public void setFernetKey(CatalogApplicationConfig config) {
     FernetConfiguration fernetConfiguration = config.getFernetConfiguration();
     String fernetKey = fernetConfiguration != null ? fernetConfiguration.getFernetKey() : null;
     setFernetKey(fernetKey);
