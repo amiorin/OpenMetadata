@@ -227,7 +227,7 @@ public class DatabaseServiceResourceTest extends EntityResourceTest<DatabaseServ
     validatePassword(oldFernetKey, databaseConnection.getPassword(), service.getDatabaseConnection().getPassword());
     Fernet.getInstance().setFernetKey(newFernetKey + "," + oldFernetKey);
     TestUtils.post(getResource(collectionName + "/rotate"), OK, ADMIN_AUTH_HEADERS);
-    DatabaseService rotated = getEntity(service.getId(), ADMIN_AUTH_HEADERS);
+    DatabaseService rotated = getEntity(service.getId(), TEST_AUTH_HEADERS);
     validatePassword(newFernetKey, databaseConnection.getPassword(), rotated.getDatabaseConnection().getPassword());
   }
 

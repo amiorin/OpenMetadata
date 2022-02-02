@@ -13,6 +13,8 @@
 
 package org.openmetadata.catalog.resources.services.database;
 
+import static org.openmetadata.catalog.fernet.Fernet.isTokenized;
+
 import io.swagger.annotations.Api;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -47,13 +49,17 @@ import javax.ws.rs.core.SecurityContext;
 import javax.ws.rs.core.UriInfo;
 import org.openmetadata.catalog.api.services.CreateDatabaseService;
 import org.openmetadata.catalog.entity.services.DatabaseService;
+import org.openmetadata.catalog.fernet.Fernet;
 import org.openmetadata.catalog.jdbi3.CollectionDAO;
 import org.openmetadata.catalog.jdbi3.DatabaseServiceRepository;
 import org.openmetadata.catalog.resources.Collection;
+import org.openmetadata.catalog.security.AuthorizationException;
 import org.openmetadata.catalog.security.Authorizer;
 import org.openmetadata.catalog.security.SecurityUtil;
+import org.openmetadata.catalog.type.DatabaseConnection;
 import org.openmetadata.catalog.type.EntityHistory;
 import org.openmetadata.catalog.type.Include;
+import org.openmetadata.catalog.type.MetadataOperation;
 import org.openmetadata.catalog.util.EntityUtil;
 import org.openmetadata.catalog.util.RestUtil;
 import org.openmetadata.catalog.util.RestUtil.DeleteResponse;
@@ -72,11 +78,13 @@ public class DatabaseServiceResource {
 
   static final String FIELDS = "airflowPipeline";
   public static final List<String> FIELD_LIST = Arrays.asList(FIELDS.replace(" ", "").split(","));
+  private final Fernet fernet;
 
   public DatabaseServiceResource(CollectionDAO dao, Authorizer authorizer) {
     Objects.requireNonNull(dao, "DatabaseServiceRepository must not be null");
     this.dao = new DatabaseServiceRepository(dao);
     this.authorizer = authorizer;
+    this.fernet = Fernet.getInstance();
   }
 
   public static class DatabaseServiceList extends ResultList<DatabaseService> {
@@ -163,7 +171,7 @@ public class DatabaseServiceResource {
           Include include)
       throws IOException, ParseException {
     EntityUtil.Fields fields = new EntityUtil.Fields(FIELD_LIST, fieldsParam);
-    return dao.get(uriInfo, id, fields, include);
+    return decrypt(securityContext, dao.get(uriInfo, id, fields, include));
   }
 
   @GET
@@ -197,7 +205,7 @@ public class DatabaseServiceResource {
           Include include)
       throws IOException, ParseException {
     EntityUtil.Fields fields = new EntityUtil.Fields(FIELD_LIST, fieldsParam);
-    return dao.getByName(uriInfo, name, fields, include);
+    return decrypt(securityContext, dao.getByName(uriInfo, name, fields, include));
   }
 
   @GET
@@ -338,6 +346,21 @@ public class DatabaseServiceResource {
     SecurityUtil.checkAdminOrBotRole(authorizer, securityContext);
     dao.rotate();
     return Response.ok().build();
+  }
+
+  private DatabaseService decrypt(SecurityContext securityContext, DatabaseService databaseService) {
+    try {
+      SecurityUtil.checkAdminRoleOrPermissions(authorizer, securityContext, null, MetadataOperation.DecryptTokens);
+    } catch (AuthorizationException e) {
+      return databaseService;
+    }
+    DatabaseConnection databaseConnection = databaseService.getDatabaseConnection();
+    if (databaseConnection != null
+        && databaseConnection.getPassword() != null
+        && isTokenized(databaseConnection.getPassword())) {
+      databaseConnection.setPassword(fernet.decrypt(databaseConnection.getPassword()));
+    }
+    return databaseService;
   }
 
   private DatabaseService getService(CreateDatabaseService create, SecurityContext securityContext) {
