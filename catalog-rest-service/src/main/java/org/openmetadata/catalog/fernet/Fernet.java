@@ -33,16 +33,15 @@ public class Fernet {
   private static Fernet instance;
   private String fernetKey;
   public static String FERNET_PREFIX = "fernet:";
-  private Validator<String> validator;
+  public static String FERNET_NO_ENCRYPTION = "no_encryption_at_rest";
+  private Validator<String> validator =
+      new StringValidator() {
+        public TemporalAmount getTimeToLive() {
+          return Duration.ofSeconds(Instant.MAX.getEpochSecond());
+        }
+      };
 
-  private Fernet() {
-    this.validator =
-        new StringValidator() {
-          public TemporalAmount getTimeToLive() {
-            return Duration.ofSeconds(Instant.MAX.getEpochSecond());
-          }
-        };
-  }
+  private Fernet() {}
 
   public static Fernet getInstance() {
     if (instance == null) {
@@ -53,13 +52,13 @@ public class Fernet {
 
   public void setFernetKey(CatalogApplicationConfig config) {
     FernetConfiguration fernetConfiguration = config.getFernetConfiguration();
-    String fernetKey = fernetConfiguration != null ? fernetConfiguration.getFernetKey() : null;
-    setFernetKey(fernetKey);
+    if (fernetConfiguration != null && !FERNET_NO_ENCRYPTION.equals(fernetConfiguration.getFernetKey())) {
+      setFernetKey(fernetConfiguration.getFernetKey());
+    }
   }
 
   @VisibleForTesting
   public Fernet(String fernetKey) {
-    this();
     this.setFernetKey(fernetKey);
   }
 
@@ -76,7 +75,7 @@ public class Fernet {
     if (secret.startsWith(FERNET_PREFIX)) {
       throw new IllegalArgumentException(isAlreadyTokenized());
     }
-    if (fernetKey != null) {
+    if (isKeyDefined()) {
       Key key = new Key(fernetKey.split(",")[0]);
       return FERNET_PREFIX + Token.generate(key, secret).serialise();
     }
@@ -88,7 +87,7 @@ public class Fernet {
   }
 
   public String decrypt(String tokenized) {
-    if (fernetKey == null) {
+    if (!isKeyDefined()) {
       throw new IllegalArgumentException(fernetKeyNotDefined());
     }
     if (tokenized != null && tokenized.startsWith(FERNET_PREFIX)) {
