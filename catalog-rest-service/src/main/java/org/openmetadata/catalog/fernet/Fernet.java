@@ -98,4 +98,15 @@ public class Fernet {
     }
     throw new IllegalArgumentException(isNotTokenized());
   }
+
+  public static String decryptIfTokenized(String tokenized) {
+    if (tokenized == null) {
+      return null;
+    }
+    Fernet fernet = Fernet.getInstance();
+    if (fernet.isKeyDefined() && isTokenized(tokenized)) {
+      return fernet.decrypt(tokenized);
+    }
+    return tokenized;
+  }
 }

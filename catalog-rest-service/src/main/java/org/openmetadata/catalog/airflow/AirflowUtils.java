@@ -15,6 +15,7 @@ package org.openmetadata.catalog.airflow;
 
 import static org.openmetadata.catalog.Entity.DATABASE_SERVICE;
 import static org.openmetadata.catalog.Entity.helper;
+import static org.openmetadata.catalog.fernet.Fernet.decryptIfTokenized;
 
 import java.io.IOException;
 import java.text.ParseException;
@@ -68,7 +69,7 @@ public final class AirflowUtils {
     Map<String, Object> dbConfig = new HashMap<>();
     dbConfig.put(INGESTION_HOST_PORT, databaseConnection.getHostPort());
     dbConfig.put(INGESTION_USERNAME, databaseConnection.getUsername());
-    dbConfig.put(INGESTION_PASSWORD, databaseConnection.getPassword());
+    dbConfig.put(INGESTION_PASSWORD, decryptIfTokenized(databaseConnection.getPassword()));
     dbConfig.put(INGESTION_DATABASE, databaseConnection.getDatabase());
     dbConfig.put(INGESTION_SERVICE_NAME, databaseService.getName());
     if (databaseConnection.getConnectionOptions() != null

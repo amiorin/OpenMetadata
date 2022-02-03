@@ -19,6 +19,7 @@ import static javax.ws.rs.core.Response.Status.OK;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.openmetadata.catalog.Entity.helper;
+import static org.openmetadata.catalog.fernet.Fernet.decryptIfTokenized;
 import static org.openmetadata.catalog.util.TestUtils.ADMIN_AUTH_HEADERS;
 import static org.openmetadata.catalog.util.TestUtils.TEST_AUTH_HEADERS;
 import static org.openmetadata.catalog.util.TestUtils.getPrincipal;
@@ -140,7 +141,7 @@ public class DatabaseServiceResourceTest extends EntityResourceTest<DatabaseServ
             .withUsername("username");
     update.withDatabaseConnection(databaseConnection);
     service = updateEntity(update, OK, ADMIN_AUTH_HEADERS);
-    assertEquals(databaseConnection, service.getDatabaseConnection());
+    validateDatabaseConnection(databaseConnection, service.getDatabaseConnection());
     ConnectionArguments connectionArguments =
         new ConnectionArguments()
             .withAdditionalProperty("credentials", "/tmp/creds.json")
@@ -150,7 +151,7 @@ public class DatabaseServiceResourceTest extends EntityResourceTest<DatabaseServ
     databaseConnection.withConnectionArguments(connectionArguments).withConnectionOptions(connectionOptions);
     update.withDatabaseConnection(databaseConnection);
     service = updateEntity(update, OK, ADMIN_AUTH_HEADERS);
-    assertEquals(databaseConnection, service.getDatabaseConnection());
+    validateDatabaseConnection(databaseConnection, service.getDatabaseConnection());
 
     AirflowPipelineResourceTest airflowPipelineResourceTest = new AirflowPipelineResourceTest();
     CreateAirflowPipeline createAirflowPipeline =
@@ -191,8 +192,7 @@ public class DatabaseServiceResourceTest extends EntityResourceTest<DatabaseServ
 
   @Test
   void fernet_createDatabaseService(TestInfo test) throws IOException {
-    String fernetKey = "ihZpp5gmmDvVsgoOG6OVivKWwC9vd5JQ";
-    Fernet.getInstance().setFernetKey(fernetKey);
+    Fernet.getInstance().setFernetKey(FERNET_KEY_1);
 
     DatabaseConnection databaseConnection =
         new DatabaseConnection()
@@ -202,19 +202,17 @@ public class DatabaseServiceResourceTest extends EntityResourceTest<DatabaseServ
             .withUsername("username");
     DatabaseService service =
         createAndCheckEntity(createRequest(test, 0).withDatabaseConnection(databaseConnection), ADMIN_AUTH_HEADERS);
-    validatePassword(fernetKey, databaseConnection.getPassword(), service.getDatabaseConnection().getPassword());
+    validatePassword(FERNET_KEY_1, databaseConnection.getPassword(), service.getDatabaseConnection().getPassword());
 
-    Fernet.getInstance().setFernetKey(fernetKey + ",old_key_not_to_be_used");
+    Fernet.getInstance().setFernetKey(FERNET_KEY_1 + ",old_key_not_to_be_used");
     service =
         createAndCheckEntity(createRequest(test, 1).withDatabaseConnection(databaseConnection), ADMIN_AUTH_HEADERS);
-    validatePassword(fernetKey, databaseConnection.getPassword(), service.getDatabaseConnection().getPassword());
+    validatePassword(FERNET_KEY_1, databaseConnection.getPassword(), service.getDatabaseConnection().getPassword());
   }
 
   @Test
   void fernet_rotateDatabaseService(TestInfo test) throws IOException {
-    String oldFernetKey = "ihZpp5gmmDvVsgoOG6OVivKWwC9vd5JQ";
-    String newFernetKey = "0cDdxg2rlodhcsjtmuFsOOvWpRRTW9ZJ";
-    Fernet.getInstance().setFernetKey(oldFernetKey);
+    Fernet.getInstance().setFernetKey(FERNET_KEY_1);
 
     DatabaseConnection databaseConnection =
         new DatabaseConnection()
@@ -224,11 +222,11 @@ public class DatabaseServiceResourceTest extends EntityResourceTest<DatabaseServ
             .withUsername("username");
     DatabaseService service =
         createAndCheckEntity(createRequest(test).withDatabaseConnection(databaseConnection), ADMIN_AUTH_HEADERS);
-    validatePassword(oldFernetKey, databaseConnection.getPassword(), service.getDatabaseConnection().getPassword());
-    Fernet.getInstance().setFernetKey(newFernetKey + "," + oldFernetKey);
+    validatePassword(FERNET_KEY_1, databaseConnection.getPassword(), service.getDatabaseConnection().getPassword());
+    Fernet.getInstance().setFernetKey(FERNET_KEY_2 + "," + FERNET_KEY_1);
     TestUtils.post(getResource(collectionName + "/rotate"), OK, ADMIN_AUTH_HEADERS);
     DatabaseService rotated = getEntity(service.getId(), TEST_AUTH_HEADERS);
-    validatePassword(newFernetKey, databaseConnection.getPassword(), rotated.getDatabaseConnection().getPassword());
+    validatePassword(FERNET_KEY_2, databaseConnection.getPassword(), rotated.getDatabaseConnection().getPassword());
   }
 
   private void validatePassword(String fernetKey, String expected, String tokenized) {
@@ -262,6 +260,7 @@ public class DatabaseServiceResourceTest extends EntityResourceTest<DatabaseServ
       return;
     }
     assertEquals(expected.getUsername(), actual.getUsername());
+    assertEquals(decryptIfTokenized(expected.getPassword()), decryptIfTokenized(actual.getPassword()));
     assertEquals(expected.getDatabase(), actual.getDatabase());
     assertEquals(expected.getHostPort(), actual.getHostPort());
     assertEquals(expected.getConnectionArguments(), actual.getConnectionArguments());

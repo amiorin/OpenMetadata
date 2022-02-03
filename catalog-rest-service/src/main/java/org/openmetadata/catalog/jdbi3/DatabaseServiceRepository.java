@@ -23,6 +23,7 @@ import java.security.GeneralSecurityException;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import org.openmetadata.catalog.Entity;
 import org.openmetadata.catalog.entity.services.DatabaseService;
@@ -264,6 +265,14 @@ public class DatabaseServiceRepository extends EntityRepository<DatabaseService>
     private void updateDatabaseConnectionConfig() throws JsonProcessingException {
       DatabaseConnection origConn = original.getEntity().getDatabaseConnection();
       DatabaseConnection updatedConn = updated.getEntity().getDatabaseConnection();
+      if (origConn != null
+          && updatedConn != null
+          && Objects.equals(
+              Fernet.decryptIfTokenized(origConn.getPassword()),
+              Fernet.decryptIfTokenized(updatedConn.getPassword()))) {
+        // Password in clear didn't change. The tokenized changed because it's time-dependent.
+        updatedConn.setPassword(origConn.getPassword());
+      }
       recordChange("databaseConnection", origConn, updatedConn, true);
     }
   }

@@ -28,6 +28,7 @@ import static org.openmetadata.catalog.airflow.AirflowUtils.INGESTION_OPTIONS;
 import static org.openmetadata.catalog.airflow.AirflowUtils.INGESTION_PASSWORD;
 import static org.openmetadata.catalog.airflow.AirflowUtils.INGESTION_SERVICE_NAME;
 import static org.openmetadata.catalog.airflow.AirflowUtils.INGESTION_USERNAME;
+import static org.openmetadata.catalog.fernet.Fernet.decryptIfTokenized;
 import static org.openmetadata.catalog.util.TestUtils.ADMIN_AUTH_HEADERS;
 import static org.openmetadata.catalog.util.TestUtils.UpdateType.MINOR_UPDATE;
 import static org.openmetadata.catalog.util.TestUtils.assertListNotNull;
@@ -564,7 +565,7 @@ public class AirflowPipelineResourceTest extends EntityOperationsResourceTest<Ai
     assertEquals(databaseService.getName(), source.getConfig().get(INGESTION_SERVICE_NAME));
     assertEquals(databaseConnection.getHostPort(), source.getConfig().get(INGESTION_HOST_PORT));
     assertEquals(databaseConnection.getUsername(), source.getConfig().get(INGESTION_USERNAME));
-    assertEquals(databaseConnection.getPassword(), source.getConfig().get(INGESTION_PASSWORD));
+    assertEquals(decryptIfTokenized(databaseConnection.getPassword()), source.getConfig().get(INGESTION_PASSWORD));
     assertEquals(databaseConnection.getDatabase(), source.getConfig().get(INGESTION_DATABASE));
     if (databaseConnection.getConnectionArguments() != null) {
       assertEquals(
